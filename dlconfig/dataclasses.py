@@ -1,37 +1,44 @@
 import types
 import json
 import yaml
-from dataclasses import dataclass as _dataclass, is_dataclass, asdict
+from dataclasses import dataclass as _dataclass
+from dataclasses import is_dataclass, asdict, make_dataclass
 
 __all__ = ['dataclass']
 
 # decorator to wrap original __init__
 def dataclass(*args, **kwargs):
 
-    def wrapper(check_class):
+    def wrapper(cclass, version='0.0'):
 
         # passing class to investigate
-        check_class = _dataclass(check_class, **kwargs)
-        o_init = check_class.__init__
+        cclass = _dataclass(cclass, **kwargs)
+        o_init = cclass.__init__
 
         def __init__(self, *args, **kwargs):
 
             for name, value in kwargs.items():
 
                 # getting field type
-                ft = check_class.__annotations__.get(name, None)
+                ft = cclass.__annotations__.get(name, None)
 
                 if is_dataclass(ft) and isinstance(value, dict):
                     obj = ft(**value)
                     kwargs[name]= obj
                 o_init(self, *args, **kwargs)
         # injecting methods
-        check_class.__init__=__init__
-        check_class.save = types.MethodType(_save, check_class)
+        cclass.__init__=__init__
+        cclass.save = types.MethodType(_save, cclass)
+        cclass.load = _load
+        cclass.asdict = types.MethodType(_load, cclass)
+        # inject version
+        cclass.__class__ = make_dataclass('versioned_' + cclass.__class__.__name__,
+                                          fields=[('__version__', version)], base=(cclass.__class__,))
 
-        return check_class
+        return cclass
 
-    return wrapper(args[0]) if args else wrapper
+    _version = str(kwargs.get('version', '0.0'))
+    return wrapper(args[0], version=_version) if args else wrapper
 
 def _save(self, f):
     d = asdict(self)
@@ -47,3 +54,21 @@ def _save(self, f):
     else:
         # file-like
         yaml.dump(d, f)
+
+@classmethod
+def _load(cls, f):
+    if isinstance(f, str):
+        if f.endswith('.json'):
+            with open(f, 'r') as fi:
+                d = json.load(fi)
+        elif f.endswith('.yaml') or f.endswith('.yml'):
+            with open(f, 'r') as fi:
+                d = yaml.load(fi)
+        else:
+            raise ValueError('{} is not one of supported types: {}'.format(f, ('.json', '.yml', '.yaml')))
+    else:
+        # file-like
+        yaml.dump(d, f)
+
+def _asdict(self):
+    return asdict(self)
