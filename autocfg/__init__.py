@@ -1,2 +1,2 @@
-"""dlconfig library"""
+"""autocfg library"""
 from .dataclasses import dataclass

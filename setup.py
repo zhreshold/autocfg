@@ -4,14 +4,14 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="dlconfig", # Replace with your own username
+    name="autocfg", # Replace with your own username
     version="0.0.1",
-    author="dlconfig contributors",
-    author_email="dlconfig@example.com",
+    author="autocfg contributors",
+    author_email="autocfg@example.com",
     description="Deep learning configuration",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/zhreshold/dlconfig",
+    url="https://github.com/zhreshold/autocfg",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

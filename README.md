@@ -1,11 +1,11 @@
-# dlconfig
+# autocfg
 Configuration system for Deep Learning
 
 # Example
 
 ```python
-from dlconfig import dataclass  # advanced decorator out of dataclasses
-from dlconfig import Annotate  # version(and more) annotations
+from autocfg import dataclass  # advanced decorator out of dataclasses
+from autocfg import Annotate  # version(and more) annotations
 
 @dataclass(version='0.1')
 class TrainConfig:
@@ -34,10 +34,10 @@ dd = cfg.asdict()
 # dd : {'train': {'batch_size': 32, 'learning_rate': 0.001, 'weight_decay': 0.00001}, \
 # 'num_class': 10, 'depth': 50}
 
-# dlconfig automatically generates argparser, and can be used similarly
+# autocfg automatically generates argparser, and can be used similarly
 cfg.parse_args()
 
-# dlconfig can save/load from/to JSON/YAML
+# autocfg can save/load from/to JSON/YAML
 cfg.save('cfg.yaml')
 cfg = MyExp.load('cfg.yaml')
 
