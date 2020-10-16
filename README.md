@@ -11,7 +11,7 @@ from autocfg import Annotate  # version(and more) annotations
 class TrainConfig:
   batch_size : int = 32
   learning_rate : float = 1e-3
-  lr : Annotate(float, deprecated='0.1', deleted='0.3', target='learning_rate') = 1e-3
+  lr : Annotate(float, deprecated='0.1', deleted='0.3') = 1e-3
   weight_decay : Annotate(float, added='0.1') = 1e-5
 
 # supports nested config

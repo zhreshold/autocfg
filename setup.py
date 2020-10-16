@@ -21,5 +21,6 @@ setuptools.setup(
     python_requires='>=3.6',
     install_requires=[
         'pyyaml',
-        'dataclasses;python_version<"3.7"'],
+        'dataclasses;python_version<"3.7"',
+        'pydantic']
 )
