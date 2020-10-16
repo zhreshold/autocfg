@@ -59,7 +59,8 @@ def dataclass(*args, **kwargs):
         cclass.save = _save  # types.MethodType(_save, cclass)
         cclass.load = _load
         cclass.__auto_version__ = _version
-        cclass.asdict = todict
+        cclass.asdict = asdict
+        # cclass.fromdict = lambda d: dataclass_from_dict(cclass, d)
         cclass.__getattribute__ = __getattribute__
         cclass.__repr__ = __repr__
         # inject version
@@ -130,49 +131,10 @@ def _load(cls, f):
                 d = json.load(fi)
         elif f.endswith('.yaml') or f.endswith('.yml'):
             with open(f, 'r') as fi:
-                d = yaml.load(fi)
+                d = yaml.load(fi, Loader=yaml.FullLoader)
         else:
             raise ValueError('{} is not one of supported types: {}'.format(f, ('.json', '.yml', '.yaml')))
     else:
         # file-like
-        d = yaml.load(f)
-
-class TypeDict(dict):
-    def __init__(self, t, *args, **kwargs):
-        super(TypeDict, self).__init__(*args, **kwargs)
-
-        if not isinstance(t, type):
-            raise TypeError("t must be a type")
-
-        self._type = t
-
-    @property
-    def type(self):
-        return self._type
-
-def _todict_inner(obj):
-    if is_dataclass_instance(obj):
-        result = []
-        for f in fields(obj):
-            value = _todict_inner(getattr(obj, f.name))
-            result.append((f.name, value))
-        return TypeDict(type(obj), result)
-
-    elif isinstance(obj, tuple) and hasattr(obj, '_fields'):
-        return type(obj)(*[_todict_inner(v) for v in obj])
-    elif isinstance(obj, (list, tuple)):
-        return type(obj)(_todict_inner(v) for v in obj)
-    elif isinstance(obj, dict):
-        return type(obj)((_todict_inner(k), _todict_inner(v))
-                         for k, v in obj.items())
-    else:
-        return copy.deepcopy(obj)
-
-def is_dataclass_instance(obj):
-    return is_dataclass(obj) and not is_dataclass(obj.type)
-
-# the adapted version of asdict
-def todict(obj):
-    if not is_dataclass_instance(obj):
-         raise TypeError("todict() should be called on dataclass instances")
-    return _todict_inner(obj)
+        d = yaml.load(f, Loader=yaml.FullLoader)
+    return cls(**d)
