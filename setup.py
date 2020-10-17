@@ -22,7 +22,6 @@ setuptools.setup(
     install_requires=[
         'pyyaml',
         'dataclasses;python_version<"3.7"',
-        'deepdiff'
     ],
     tests_require=[
         'pytest'
