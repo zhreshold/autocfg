@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import typing
 
 @dataclass
-class Annotate:
+class AnnotateField:
     type : typing.Any
     added : typing.Union[str, None] = None
     deprecated : typing.Union[str, None] = None

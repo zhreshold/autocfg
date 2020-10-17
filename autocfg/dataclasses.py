@@ -3,36 +3,62 @@ import types
 from typing import *
 import copy
 import json
+import argparse
 from distutils.version import LooseVersion
 import warnings
 import yaml
 from dataclasses import dataclass as _dataclass
-from dataclasses import is_dataclass, asdict, make_dataclass, fields
-from .annotate import Annotate
+from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE
+from .annotate import AnnotateField
 
 __all__ = ['dataclass']
 
-# decorator to wrap original __init__
 def dataclass(*args, **kwargs):
+    """Drop-in replacement for native dataclasses.dataclass.
+
+    Returns the same class as was passed in, with dunder methods
+    added based on the fields defined in the class.
+
+    Examines PEP 526 __annotations__ to determine fields.
+
+    If init is true, an __init__() method is added to the class. If
+    repr is true, a __repr__() method is added. If order is true, rich
+    comparison dunder methods are added. If unsafe_hash is true, a
+    __hash__() method function is added. If frozen is true, fields may
+    not be assigned to after instance creation.
+
+    Extra Parameters
+    ----------------
+    version : str, optional, default is '0.0'
+        The semantic version of the annatated dataclass
+    """
     _version = str(kwargs.pop('version', '0.0'))
 
-    def wrapper(cclass, version='0.0'):
+    def wrapper(klass, version='0.0'):
         # passing class to investigate
-        cclass.__post_init__ = __post_init__
-        cclass = _dataclass(cclass, **kwargs)
-        o_init = cclass.__init__
-        o__getattribute__ = cclass.__getattribute__
-        o__repr__ = cclass.__repr__ if hasattr(cclass, '__repr__') else None
+        klass.__post_init__ = __post_init__
+        klass = _dataclass(klass, **kwargs)
+        o_init = klass.__init__
+        o__getattribute__ = klass.__getattribute__
+        o__repr__ = klass.__repr__ if hasattr(klass, '__repr__') else None
 
         def __init__(self, *args, **kwargs):
             self.__version_annotation__ = {}
             for name, value in kwargs.items():
                 # getting field type
-                ft = cclass.__annotations__.get(name, None)
+                ft = klass.__annotations__.get(name, None)
                 if is_dataclass(ft) and isinstance(value, dict):
                     obj = ft(**value)
                     kwargs[name]= obj
-            o_init(self, *args, **kwargs)
+
+            # check for keys, in case non-exist keys are passed into __init__, causing TypeError
+            valid_kwargs = {}
+            for k, v in kwargs.items():
+                if klass.__annotations__.get(k, None):
+                    valid_kwargs.update({k: v})
+                else:
+                    warnings.warn(f'Unexpected `{k}: {v}` in {self.__class__.__name__}')
+            o_init(self, *args, **valid_kwargs)
 
         def __getattribute__(self, name):
             annotation = o__getattribute__(self, '__version_annotation__').get(name, None)
@@ -55,19 +81,17 @@ def dataclass(*args, **kwargs):
             return ''
 
         # injecting methods
-        cclass.__init__=__init__
-        cclass.save = _save  # types.MethodType(_save, cclass)
-        cclass.load = _load
-        cclass.__auto_version__ = _version
-        cclass.asdict = asdict
-        # cclass.fromdict = lambda d: dataclass_from_dict(cclass, d)
-        cclass.__getattribute__ = __getattribute__
-        cclass.__repr__ = __repr__
-        # inject version
-        # cclass.__class__ = make_dataclass(cclass.__class__.__name__,
-        #                                 fields=[('__auto_version__', version)], bases=(cclass.__class__,))
-
-        return cclass
+        klass.__init__=__init__
+        klass.save = _save
+        klass.load = _load
+        klass.__auto_version__ = _version
+        klass.asdict = asdict
+        klass.__getattribute__ = __getattribute__
+        klass.__repr__ = __repr__
+        klass.parse_args = _parse_args
+        klass.update = _update
+        klass.diff = _diff
+        return klass
 
     return wrapper(args[0], version=_version) if args else wrapper
 
@@ -75,7 +99,7 @@ def __post_init__(self):
     for field_name, field_def in self.__dataclass_fields__.items():
         actual_value = getattr(self, field_name)
         required_type = field_def.type
-        if isinstance(required_type, Annotate):
+        if isinstance(required_type, AnnotateField):
             # check versions
             auto_version = LooseVersion(self.__auto_version__)
             added_version = LooseVersion(required_type.added if required_type.added else '0.0')
@@ -91,13 +115,13 @@ def __post_init__(self):
                 self.__version_annotation__[field_name] = {
                     'mark': 'deprecated',
                     'message': f'`{self.__class__}.{field_name}` is deprecated in {deprecated_version} ' +
-                        f'and will be deleted in {deleted_version}. Current is {auto_version}'
+                        f'and will be deleted in {deleted_version}, current is {auto_version}'
                 }
             elif deleted_version <= auto_version:
                 self.__version_annotation__[field_name] = {
                     'mark': 'deleted',
                     'message': f'`{self.__class__}.{field_name}` is deleted in {deleted_version} in {self.__class__}' +
-                        f'. Current is {auto_version}'
+                        f', current is {auto_version}'
                 }
                 continue
             required_type = required_type.type
@@ -116,6 +140,7 @@ def _save(self, f):
                 json.dump(d, fo)
         elif f.endswith('.yaml') or f.endswith('.yml'):
             with open(f, 'w') as fo:
+                fo.write(f'# {self.__class__.__name__}\n')
                 yaml.dump(d, fo)
         else:
             raise ValueError('{} is not one of supported types: {}'.format(f, ('.json', '.yml', '.yaml')))
@@ -136,5 +161,113 @@ def _load(cls, f):
             raise ValueError('{} is not one of supported types: {}'.format(f, ('.json', '.yml', '.yaml')))
     else:
         # file-like
-        d = yaml.load(f, Loader=yaml.FullLoader)
+        d = yaml.load(f.getvalue(), Loader=yaml.FullLoader)
+    if not d:
+        raise ValueError(f'Unable to load from {f}')
     return cls(**d)
+
+@classmethod
+def _parse_args(cls, args=None, namespace=None):
+    parser = argparse.ArgumentParser(f"{cls.__name__}'s auto argument parser",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _parse_args_impl(cls, parser, None)
+    args = vars(parser.parse_args(args=args, namespace=namespace))
+    # convert to nested dict from 'xxx.yyy.zzz'
+    new_args = {}
+    for k, v in args.items():
+        ks = k.split('.')
+        d = {}
+        _d = new_args
+        for i, key in enumerate(ks[:-1]):
+            if key not in _d:
+                _d[key] = {}
+            _d = _d[key]
+        _d.update({ks[-1]: v})
+    return cls(**new_args)
+
+def _parse_args_impl(cls, parser, prefix):
+    if prefix is None:
+        prefix = []
+    def mangle_name(name):
+        return '--' + name.replace('_', '-')
+    for field in fields(cls):
+        new_prefix = prefix + [field.name]
+        default = field.default
+        value_or_class = field.type
+        if isinstance(value_or_class, AnnotateField):
+            value_or_class = value_or_class.type
+        if is_dataclass(value_or_class):
+            _parse_args_impl(value_or_class, parser, new_prefix)
+        elif isinstance(default, _MISSING_TYPE):
+            # no default value
+            parser.add_argument(mangle_name('.'.join(new_prefix)), type=value_or_class, help=field.name)
+        else:
+            parser.add_argument(mangle_name('.'.join(new_prefix)),
+                                type=value_or_class, default=default, help=field.name)
+
+def _update(self, other=None, allow_new_key=False, allow_type_change=False, **kwargs):
+    klass = self.__class__
+    if other is None and len(kwargs) > 0:
+        _update(self, kwargs, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
+    elif isinstance(other, str) or hasattr(other, 'getvalue'):
+        try:
+            o = klass.load(other)
+            udict = o.asdict()
+        except ValueError:
+            raise ValueError(f'Unable to update from {other}')
+        _update(self, udict, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
+    elif isinstance(other, klass):
+        for f in fields(other):
+            setattr(self, f.name, getattr(other, f.name))
+    elif isinstance(other, dict):
+        for k, v in other.items():
+            if not hasattr(self, k):
+                if not allow_new_key:
+                    raise KeyError(f'{k} is not a valid key in {self}, as `allow_new_key` is {allow_new_key}')
+                elif isinstance(v, dict):
+                    raise ValueError(f'Cannot set new key {k} with nested value')
+                else:
+                    raise NotImplementedError('Adding new key not implemented')
+            else:
+                old_v = getattr(self, k)
+                new_v = v
+                if is_dataclass(old_v):
+                    assert isinstance(v, dict)
+                    old_v.update(v, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
+                else:
+                    if not type(old_v) == type(new_v) and not allow_type_change:
+                        raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)}')
+                    setattr(self, k, new_v)
+
+def _diff(self, other):
+    assert isinstance(other, self.__class__)
+    dd = recursive_compare(self.asdict(), other.asdict())
+    return dd
+
+def recursive_compare(d1, d2, level='root', diffs=None):
+    if diffs is None:
+        diffs = []
+    if isinstance(d1, dict) and isinstance(d2, dict):
+        if d1.keys() != d2.keys():
+            s1 = set(d1.keys())
+            s2 = set(d2.keys())
+            diffs.append('{:<20} + {} - {}'.format(level, s1-s2, s2-s1))
+            common_keys = s1 & s2
+        else:
+            common_keys = set(d1.keys())
+
+        for k in common_keys:
+            recursive_compare(d1[k], d2[k], level='{}.{}'.format(level, k), diffs=diffs)
+
+    elif isinstance(d1, list) and isinstance(d2, list):
+        if len(d1) != len(d2):
+            diffs.append('{:<20} len1={}; len2={}'.format(level, len(d1), len(d2)))
+        common_len = min(len(d1), len(d2))
+
+        for i in range(common_len):
+            recursive_compare(d1[i], d2[i], level='{}[{}]'.format(level, i), diffs=diffs)
+
+    else:
+        if d1 != d2:
+            diffs.append('{:<20} {} != {}'.format(level, d1, d2))
+    return diffs

@@ -5,14 +5,14 @@ Configuration system for Deep Learning
 
 ```python
 from autocfg import dataclass  # advanced decorator out of dataclasses
-from autocfg import Annotate  # version(and more) annotations
+from autocfg import AnnotateField as AF  # version(and more) annotations
 
 @dataclass(version='0.1')
 class TrainConfig:
   batch_size : int = 32
   learning_rate : float = 1e-3
-  lr : Annotate(float, deprecated='0.1', deleted='0.3') = 1e-3
-  weight_decay : Annotate(float, added='0.1') = 1e-5
+  lr : AF(float, deprecated='0.1', deleted='0.3') = 1e-3
+  weight_decay : AF(float, added='0.1') = 1e-5
 
 # supports nested config
 # the versions of nested config are independent of each other
