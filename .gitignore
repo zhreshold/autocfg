@@ -1,3 +1,8 @@
+# custom
+examples/*.yaml
+examples/*.yml
+examples/*.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

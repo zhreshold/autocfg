@@ -9,9 +9,10 @@ import warnings
 import yaml
 from dataclasses import dataclass as _dataclass
 from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE
+from dataclasses import field
 from .annotate import AnnotateField
 
-__all__ = ['dataclass']
+__all__ = ['dataclass', 'field']
 
 def dataclass(*args, **kwargs):
     """Drop-in replacement for native dataclasses.dataclass.
@@ -68,7 +69,7 @@ def dataclass(*args, **kwargs):
                 if mark == 'deprecated':
                     warnings.warn(msg)
                 else:
-                    raise ValueError(msg)
+                    raise KeyError(msg)
             return o__getattribute__(self, name)
 
         def __repr__(self):
