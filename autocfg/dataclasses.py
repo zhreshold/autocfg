@@ -52,6 +52,11 @@ def dataclass(*args, **kwargs):
                     obj = ft(**value)
                     kwargs[name]= obj
 
+            # mutable dataclasss object, simulate immutable behavior by creating copies everytime
+            for k, v in klass.__annotations__.items():
+                if k not in kwargs and is_dataclass(v):
+                    kwargs[k] = v()
+
             # check for keys, in case non-exist keys are passed into __init__, causing TypeError
             valid_kwargs = {}
             for k, v in kwargs.items():
@@ -232,7 +237,7 @@ def _update(self, other=None, allow_new_key=False, allow_type_change=False, **kw
             else:
                 old_v = getattr(self, k)
                 new_v = v
-                if is_dataclass(old_v):
+                if is_dataclass_instance(old_v):
                     assert isinstance(v, dict)
                     old_v.update(v, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
                 else:
@@ -272,3 +277,6 @@ def recursive_compare(d1, d2, level='root', diffs=None):
         if d1 != d2:
             diffs.append('{:<20} {} != {}'.format(level, d1, d2))
     return diffs
+
+def is_dataclass_instance(obj):
+    return is_dataclass(obj) and not isinstance(obj, type)
