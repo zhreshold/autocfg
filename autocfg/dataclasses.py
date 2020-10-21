@@ -11,6 +11,7 @@ from dataclasses import dataclass as _dataclass
 from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE
 from dataclasses import field
 from .annotate import AnnotateField
+from .type_check import is_instance
 
 __all__ = ['dataclass', 'field']
 
@@ -41,6 +42,7 @@ def dataclass(*args, **kwargs):
         klass = _dataclass(klass, **kwargs)
         o_init = klass.__init__
         o__getattribute__ = klass.__getattribute__
+        o___setattr__ = klass.__setattr__
         o__repr__ = klass.__repr__ if hasattr(klass, '__repr__') else None
 
         def __init__(self, *args, **kwargs):
@@ -67,7 +69,11 @@ def dataclass(*args, **kwargs):
             o_init(self, *args, **valid_kwargs)
 
         def __getattribute__(self, name):
-            annotation = o__getattribute__(self, '__version_annotation__').get(name, None)
+            annotation = None
+            try:
+                annotation = o__getattribute__(self, '__version_annotation__').get(name, None)
+            except AttributeError:
+                pass
             if annotation:
                 mark = annotation['mark']
                 msg = annotation['message']
@@ -86,6 +92,18 @@ def dataclass(*args, **kwargs):
                 return s
             return ''
 
+        def __setattr__(self, name, value):
+            field_def = None
+            try:
+                field_def = self.__dataclass_fields__.get(name, None)
+            except AttributeError:
+                pass
+            if field_def is not None:
+                required_type = field_def.type
+                if not is_instance(value, required_type):
+                    raise TypeError(f'`{self.__class__}.{name}` requires {required_type}, given {type(value)}')
+            o___setattr__(self, name, value)
+
         # injecting methods
         klass.__init__=__init__
         klass.save = _save
@@ -93,9 +111,11 @@ def dataclass(*args, **kwargs):
         klass.__auto_version__ = _version
         klass.asdict = asdict
         klass.__getattribute__ = __getattribute__
+        klass.__setattr__ = __setattr__
         klass.__repr__ = __repr__
         klass.parse_args = _parse_args
         klass.update = _update
+        klass.merge = _merge
         klass.diff = _diff
         return klass
 
@@ -131,8 +151,8 @@ def __post_init__(self):
                 }
                 continue
             required_type = required_type.type
-        if not isinstance(actual_value, required_type):
-            raise ValueError(f'`{self.__class__}.{field_name}` requires {required_type}, given {type(actual_value)}')
+        if not is_instance(actual_value, required_type):
+            raise TypeError(f'`{self.__class__}.{field_name}` requires {required_type}, given {type(actual_value)}')
 
     for k, v in self.__version_annotation__.items():
         if v.get('mark', '') != 'deprecated':
@@ -211,19 +231,24 @@ def _parse_args_impl(cls, parser, prefix):
             parser.add_argument(mangle_name('.'.join(new_prefix)),
                                 type=value_or_class, default=default, help=field.name)
 
-def _update(self, other=None, allow_new_key=False, allow_type_change=False, **kwargs):
+def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=False, **kwargs):
     klass = self.__class__
+    if isinstance(key, str):
+        key = [key]
     if other is None and len(kwargs) > 0:
-        _update(self, kwargs, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
+        _update(self, kwargs, key=key, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
     elif isinstance(other, str) or hasattr(other, 'getvalue'):
         try:
             o = klass.load(other)
             udict = o.asdict()
         except ValueError:
             raise ValueError(f'Unable to update from {other}')
-        _update(self, udict, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
+        _update(self, udict, key=key, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
     elif isinstance(other, klass):
         for f in fields(other):
+            if key is not None:
+                if f.name not in key:
+                    continue
             setattr(self, f.name, getattr(other, f.name))
     elif isinstance(other, dict):
         for k, v in other.items():
@@ -235,6 +260,8 @@ def _update(self, other=None, allow_new_key=False, allow_type_change=False, **kw
                 else:
                     raise NotImplementedError('Adding new key not implemented')
             else:
+                if key is not None and k not in key:
+                    continue
                 old_v = getattr(self, k)
                 new_v = v
                 if is_dataclass_instance(old_v):
@@ -244,6 +271,11 @@ def _update(self, other=None, allow_new_key=False, allow_type_change=False, **kw
                     if not type(old_v) == type(new_v) and not allow_type_change:
                         raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)}')
                     setattr(self, k, new_v)
+
+def _merge(self, other=None, key=None, allow_new_key=False, allow_type_change=False, **kwargs):
+    cfg = copy.deepcopy(self)
+    cfg.update(other, allow_new_key=allow_new_key, allow_type_change=allow_type_change, **kwargs)
+    return cfg
 
 def _diff(self, other):
     assert isinstance(other, self.__class__)
