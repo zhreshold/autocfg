@@ -9,11 +9,11 @@ import warnings
 import yaml
 from dataclasses import dataclass as _dataclass
 from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE
-from dataclasses import field
+from dataclasses import field, FrozenInstanceError
 from .annotate import AnnotateField
 from .type_check import is_instance
 
-__all__ = ['dataclass', 'field']
+__all__ = ['dataclass', 'field', 'FrozenInstanceError']
 
 def dataclass(*args, **kwargs):
     """Drop-in replacement for native dataclasses.dataclass.
@@ -47,17 +47,18 @@ def dataclass(*args, **kwargs):
 
         def __init__(self, *args, **kwargs):
             self.__version_annotation__ = {}
+            self._frozen = False
             for name, value in kwargs.items():
                 # getting field type
                 ft = klass.__annotations__.get(name, None)
-                if is_dataclass(ft) and isinstance(value, dict):
+                if not isinstance(ft, AnnotateField) and is_dataclass(ft) and isinstance(value, dict):
                     obj = ft(**value)
                     kwargs[name]= obj
 
             # mutable dataclasss object, simulate immutable behavior by creating copies everytime
             for k, v in klass.__annotations__.items():
-                if k not in kwargs and is_dataclass(v):
-                    kwargs[k] = v()
+                if k not in kwargs and not isinstance(v, AnnotateField) and is_dataclass_instance(v):
+                    kwargs[k] = copy.deepcopy(v)
 
             # check for keys, in case non-exist keys are passed into __init__, causing TypeError
             valid_kwargs = {}
@@ -95,13 +96,21 @@ def dataclass(*args, **kwargs):
         def __setattr__(self, name, value):
             field_def = None
             try:
+                is_frozen = self._frozen
+            except AttributeError:
+                is_frozen = False
+            if name != '_frozen' and is_frozen:
+                raise FrozenInstanceError
+            try:
                 field_def = self.__dataclass_fields__.get(name, None)
             except AttributeError:
                 pass
             if field_def is not None:
                 required_type = field_def.type
+                if isinstance(required_type, AnnotateField):
+                    required_type = required_type.type
                 if not is_instance(value, required_type):
-                    raise TypeError(f'`{self.__class__}.{name}` requires {required_type}, given {type(value)}')
+                    raise TypeError(f'`{self.__class__}.{name}` requires {required_type}, given {type(value)}:{value}')
             o___setattr__(self, name, value)
 
         # injecting methods
@@ -117,6 +126,8 @@ def dataclass(*args, **kwargs):
         klass.update = _update
         klass.merge = _merge
         klass.diff = _diff
+        klass.freeze = _freeze
+        klass.unfreeze = _unfreeze
         return klass
 
     return wrapper(args[0], version=_version) if args else wrapper
@@ -152,7 +163,8 @@ def __post_init__(self):
                 continue
             required_type = required_type.type
         if not is_instance(actual_value, required_type):
-            raise TypeError(f'`{self.__class__}.{field_name}` requires {required_type}, given {type(actual_value)}')
+            raise TypeError(f'`{self.__class__}.{field_name}` requires {required_type},' +
+                ' given {type(actual_value)}:{actual_value}')
 
     for k, v in self.__version_annotation__.items():
         if v.get('mark', '') != 'deprecated':
@@ -232,6 +244,12 @@ def _parse_args_impl(cls, parser, prefix):
                                 type=value_or_class, default=default, help=field.name)
 
 def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=False, **kwargs):
+    try:
+        is_frozen = self._frozen
+    except AttributeError:
+        is_frozen = False
+    if is_frozen:
+        raise FrozenInstanceError
     klass = self.__class__
     if isinstance(key, str):
         key = [key]
@@ -281,6 +299,14 @@ def _diff(self, other):
     assert isinstance(other, self.__class__)
     dd = recursive_compare(self.asdict(), other.asdict())
     return dd
+
+def _freeze(self):
+    self._frozen = True
+    return self
+
+def _unfreeze(self):
+    self._frozen = False
+    return self
 
 def recursive_compare(d1, d2, level='root', diffs=None):
     if diffs is None:

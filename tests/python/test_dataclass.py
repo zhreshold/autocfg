@@ -1,7 +1,7 @@
 import warnings
 import pytest
 
-from autocfg import dataclass  # advanced decorator out of dataclasses
+from autocfg import dataclass, FrozenInstanceError  # advanced decorator out of dataclasses
 from autocfg import AnnotateField as AF  # version(and more) annotations
 
 @dataclass(version='0.1')
@@ -84,6 +84,20 @@ def test_diff():
         exp0 = MyExp(num_class=10, train=TrainConfig(learning_rate=1.0))
         exp1 = MyExp(num_class=100, train=TrainConfig(learning_rate=10.0))
         print('\n'.join(exp0.diff(exp1)))
+
+def test_freeze_unfreeze():
+    exp = MyExp(num_class=10, train=TrainConfig(learning_rate=1.0))
+    f_exp = exp.freeze()
+    with pytest.raises(FrozenInstanceError):
+        f_exp.num_class = 100
+    with pytest.raises(FrozenInstanceError):
+        f_exp.update({})
+    f_exp.unfreeze()
+    f_exp.num_class = 1000
+    f_exp = exp.freeze()
+    with pytest.raises(FrozenInstanceError):
+        f_exp.num_class = 100
+
 """
 # check for modification, including type-check
 modified, type_changed, unchanged = cfg.compare(MyExp())
