@@ -290,6 +290,11 @@ def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=F
                     assert isinstance(v, dict)
                     old_v.update(v, allow_new_key=allow_new_key, allow_type_change=allow_type_change)
                 else:
+                    # special relaxation, tuple <-> list is interchanable
+                    if isinstance(old_v, list) and isinstance(new_v, tuple):
+                        new_v = list(new_v)
+                    if isinstance(old_v, tuple) and isinstance(new_v, list):
+                        new_v = tuple(new_v)
                     if not type(old_v) == type(new_v) and not allow_type_change:
                         raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)}')
                     setattr(self, k, new_v)
