@@ -4,12 +4,17 @@ import pytest
 from autocfg import dataclass, FrozenInstanceError  # advanced decorator out of dataclasses
 from autocfg import AnnotateField as AF  # version(and more) annotations
 
+@dataclass
+class SomeConfig:
+    value : int = 1
+
 @dataclass(version='0.1')
 class TrainConfig:
   batch_size : int = 32
   learning_rate : float = 1e-3
   lr : AF(float, deprecated='0.1', deleted='0.3') = 1e-3
   weight_decay : AF(float, added='0.1') = 1e-5
+  x : SomeConfig = SomeConfig(2)
 
 # supports nested config
 # the versions of nested config are independent of each other
@@ -70,6 +75,16 @@ def test_nested_update():
         exp1 = MyExp(num_class=100, train=TrainConfig(learning_rate=10.0))
         exp1.update({'num_class': 10, 'train': {'learning_rate': 1.0}})
         assert exp0 == exp1
+
+def test_default_nested_value_intact():
+    # make sure the nested default value of another dataclass won't be overwritten
+    exp = MyExp(train=TrainConfig(batch_size=1))
+    exp.train.batch_size = 100
+    exp.train.x.value = 1000
+    train = TrainConfig()
+    assert train.batch_size == 32
+    some_x = SomeConfig()
+    assert some_x.value == 1
 
 def test_assignment():
     with pytest.warns(UserWarning):
