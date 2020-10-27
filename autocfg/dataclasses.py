@@ -115,6 +115,7 @@ def dataclass(*args, **kwargs):
 
         # injecting methods
         klass.__init__=__init__
+        klass.get = _get
         klass.save = _save
         klass.load = _load
         klass.__auto_version__ = _version
@@ -169,6 +170,9 @@ def __post_init__(self):
     for k, v in self.__version_annotation__.items():
         if v.get('mark', '') != 'deprecated':
             self.__dataclass_fields__.pop(k, None)
+
+def _get(self, name, default=None):
+    return getattr(self, name, default)
 
 def _save(self, f):
     d = asdict(self)
@@ -292,6 +296,7 @@ def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=F
 
 def _merge(self, other=None, key=None, allow_new_key=False, allow_type_change=False, **kwargs):
     cfg = copy.deepcopy(self)
+    cfg.unfreeze()
     cfg.update(other, allow_new_key=allow_new_key, allow_type_change=allow_type_change, **kwargs)
     return cfg
 
