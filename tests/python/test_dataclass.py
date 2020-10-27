@@ -9,6 +9,7 @@ from autocfg import AnnotateField as AF  # version(and more) annotations
 class SomeConfig:
     value : int = 1
     tup : Tuple = (1, 2, 3)
+    no_type = 0.5
 
 @dataclass(version='0.1')
 class TrainConfig:
@@ -103,6 +104,7 @@ def test_assignment():
         exp1 = MyExp(num_class=100, train=TrainConfig(learning_rate=10.0))
         exp1.num_class = 10
         exp1.train.learning_rate=1.0
+        exp1.train.x.no_type = 'str_type'
         assert exp0 == exp1
 
 def test_diff():
