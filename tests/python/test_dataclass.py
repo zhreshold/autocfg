@@ -1,5 +1,6 @@
 import warnings
 import pytest
+from typing import Union, Tuple
 
 from autocfg import dataclass, FrozenInstanceError  # advanced decorator out of dataclasses
 from autocfg import AnnotateField as AF  # version(and more) annotations
@@ -7,6 +8,7 @@ from autocfg import AnnotateField as AF  # version(and more) annotations
 @dataclass
 class SomeConfig:
     value : int = 1
+    tup : Tuple = (1, 2, 3)
 
 @dataclass(version='0.1')
 class TrainConfig:
@@ -39,6 +41,15 @@ def test_nested():
     assert exp.train.learning_rate == 1.0
 
 def test_save_load():
+    import io
+    f = io.StringIO()
+    with pytest.warns(UserWarning):
+        exp = MyExp(num_class=10, train=TrainConfig(learning_rate=1.0, x=SomeConfig(tup=(4, 5, 6, 7))))
+        exp.save(f)
+        exp1 = MyExp.load(f)
+        assert exp == exp1
+
+def test_save_load_tuple():
     import io
     f = io.StringIO()
     with pytest.warns(UserWarning):
