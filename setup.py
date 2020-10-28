@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="autocfg", # Replace with your own username
-    version="0.0.3",
+    version="0.0.4",
     author="autocfg contributors",
     author_email="autocfg@example.com",
     description="Deep learning configuration",

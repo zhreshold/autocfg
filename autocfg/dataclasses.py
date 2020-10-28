@@ -8,7 +8,7 @@ from distutils.version import LooseVersion
 import warnings
 import yaml
 from dataclasses import dataclass as _dataclass
-from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE
+from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE, make_dataclass
 from dataclasses import field, FrozenInstanceError
 from .annotate import AnnotateField
 from .type_check import is_instance
@@ -41,9 +41,21 @@ def dataclass(*args, **kwargs):
         klass.__post_init__ = __post_init__
         klass = _dataclass(klass, **kwargs)
         o_init = klass.__init__
+        if not hasattr(klass, '__annotations__'):
+            # no type annotated fields
+            klass.__annotations__ = {}
         o__getattribute__ = klass.__getattribute__
         o___setattr__ = klass.__setattr__
         o__repr__ = klass.__repr__ if hasattr(klass, '__repr__') else None
+        # auto adding annotations
+        auto_annotate_fields = {}
+        for k in klass.__dict__:
+            if k.startswith('__') or k in klass.__annotations__:
+                continue
+            # klass.__annotations__[k] = Any
+            auto_annotate_fields[k] = klass.__dict__[k]
+        # any_fields = [(k, Any, field(default_factory=lambda: klass.__dict__[k])) \
+            # for k in klass.__dict__ if not k.startswith('__') and k not in klass.__annotations__]
 
         def __init__(self, *args, **kwargs):
             self.__version_annotation__ = {}
@@ -63,11 +75,19 @@ def dataclass(*args, **kwargs):
             # check for keys, in case non-exist keys are passed into __init__, causing TypeError
             valid_kwargs = {}
             for k, v in kwargs.items():
-                if klass.__annotations__.get(k, None):
+                if k in klass.__annotations__:
                     valid_kwargs.update({k: v})
+                elif k in auto_annotate_fields:
+                    self.__setattr__(k, v)
                 else:
                     warnings.warn(f'Unexpected `{k}: {v}` in {self.__class__.__name__}')
             o_init(self, *args, **valid_kwargs)
+
+            # add no type annotated fields
+            for k, default_fac in auto_annotate_fields.items():
+                self.__dataclass_fields__[k] = field(default_factory=default_fac)
+                self.__dataclass_fields__[k].type = Any
+                self.__dataclass_fields__[k].name = k
 
         def __getattribute__(self, name):
             annotation = None
@@ -93,7 +113,7 @@ def dataclass(*args, **kwargs):
                 return s
             return ''
 
-        def __setattr__(self, name, value):
+        def __setattr__(self, name, value, allow_type_change=False):
             field_def = None
             try:
                 is_frozen = self._frozen
@@ -109,7 +129,7 @@ def dataclass(*args, **kwargs):
                 required_type = field_def.type
                 if isinstance(required_type, AnnotateField):
                     required_type = required_type.type
-                if not is_instance(value, required_type):
+                if not allow_type_change and not is_instance(value, required_type):
                     raise TypeError(f'`{self.__class__}.{name}` requires {required_type}, given {type(value)}:{value}')
             o___setattr__(self, name, value)
 
@@ -271,16 +291,17 @@ def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=F
             if key is not None:
                 if f.name not in key:
                     continue
-            setattr(self, f.name, getattr(other, f.name))
+            self.__setattr__(f.name, getattr(other, f.name), allow_type_change=allow_type_change)
     elif isinstance(other, dict):
         for k, v in other.items():
             if not hasattr(self, k):
                 if not allow_new_key:
                     raise KeyError(f'{k} is not a valid key in {self}, as `allow_new_key` is {allow_new_key}')
-                elif isinstance(v, dict):
-                    raise ValueError(f'Cannot set new key {k} with nested value')
                 else:
-                    raise NotImplementedError('Adding new key not implemented')
+                    new_cls = make_dataclass(self.__class__.__name__,
+                                             fields=[(k, type(v), field(default_factory=lambda: v))], bases=(self.__class__,))
+                    self.__class__ = new_cls
+                    self.__setattr__(k, v)
             else:
                 if key is not None and k not in key:
                     continue
@@ -297,7 +318,7 @@ def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=F
                         new_v = tuple(new_v)
                     if not type(old_v) == type(new_v) and not allow_type_change:
                         raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)}')
-                    setattr(self, k, new_v)
+                    self.__setattr__(k, new_v, allow_type_change=allow_type_change)
 
 def _merge(self, other=None, key=None, allow_new_key=False, allow_type_change=False, **kwargs):
     cfg = copy.deepcopy(self)

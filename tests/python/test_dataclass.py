@@ -28,6 +28,14 @@ class MyExp:
   num_class : int = 1000
   depth : int = 50
 
+# by default, python's dataclass won't annotate fields without type annotation
+# autocfg automatically catch all fields with type `typing.Any`
+@dataclass
+class Plain:
+    a = 1
+    b = '2'
+    c = (1, 2, 3)
+
 def test_single_layer():
     train = TrainConfig(batch_size=16)
     assert train.batch_size == 16
@@ -88,6 +96,19 @@ def test_nested_update():
         exp1.update({'num_class': 10, 'train': {'learning_rate': 1.0}})
         assert exp0 == exp1
 
+def test_update_new_key_type_change():
+    exp = MyExp(num_class=10, train=TrainConfig(learning_rate=1.0))
+    exp.update({'new_k': 'new_value'}, allow_new_key=True)
+    with pytest.raises(TypeError):
+        exp.new_k = 100
+    exp.update(new_k=100, allow_type_change=True)
+    assert exp.new_k == 100
+    # new key with dict value
+    exp.update({'new_dict_k': {'a': 1, 'b': '2'}}, allow_new_key=True)
+    assert exp.new_dict_k['a'] == 1
+    # no type check anymore in value dict, this is expected
+    exp.new_dict_k['a'] = '1'
+
 def test_default_nested_value_intact():
     # make sure the nested default value of another dataclass won't be overwritten
     exp = MyExp(train=TrainConfig(batch_size=1))
@@ -125,6 +146,16 @@ def test_freeze_unfreeze():
     f_exp = exp.freeze()
     with pytest.raises(FrozenInstanceError):
         f_exp.num_class = 100
+
+def test_auto_type_annotation():
+    plain = Plain(a=2)
+    assert plain.a == 2
+    plain.a = 'a'
+    assert plain.a == 'a'
+    assert plain.b == '2'
+    plain2 = Plain()
+    assert plain2.a == 1
+    assert plain2.b == '2'
 
 """
 # check for modification, including type-check
