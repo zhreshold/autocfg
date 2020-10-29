@@ -319,7 +319,7 @@ def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=F
                     if isinstance(old_v, tuple) and isinstance(new_v, list):
                         new_v = tuple(new_v)
                     if not type(old_v) == type(new_v) and not allow_type_change:
-                        raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)},' +
+                        raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)} for {k},' +
                             f' as `allow_type_change` is {allow_type_change}')
                     self.__setattr__(k, new_v, allow_type_change=allow_type_change)
 
