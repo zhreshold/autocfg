@@ -8,7 +8,7 @@ from distutils.version import LooseVersion
 import warnings
 import yaml
 from dataclasses import dataclass as _dataclass
-from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE, make_dataclass
+from dataclasses import is_dataclass, asdict, fields, _MISSING_TYPE, _FIELD, make_dataclass
 from dataclasses import field, FrozenInstanceError
 from .annotate import AnnotateField
 from .type_check import is_instance
@@ -84,10 +84,11 @@ def dataclass(*args, **kwargs):
             o_init(self, *args, **valid_kwargs)
 
             # add no type annotated fields
-            for k, default_fac in auto_annotate_fields.items():
-                self.__dataclass_fields__[k] = field(default_factory=default_fac)
+            for k, default_value in auto_annotate_fields.items():
+                self.__dataclass_fields__[k] = field(default_factory=lambda: default_value)
                 self.__dataclass_fields__[k].type = Any
                 self.__dataclass_fields__[k].name = k
+                self.__dataclass_fields__[k]._field_type = _FIELD
 
         def __getattribute__(self, name):
             annotation = None
@@ -120,7 +121,8 @@ def dataclass(*args, **kwargs):
             except AttributeError:
                 is_frozen = False
             if name != '_frozen' and is_frozen:
-                raise FrozenInstanceError
+                raise FrozenInstanceError(
+                    f'Attempted to change `{name}` attribute of a frozen instance. Call `unfreeze` if this is intended.')
             try:
                 field_def = self.__dataclass_fields__.get(name, None)
             except AttributeError:
@@ -273,7 +275,7 @@ def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=F
     except AttributeError:
         is_frozen = False
     if is_frozen:
-        raise FrozenInstanceError
+        raise FrozenInstanceError(f'Attempted to update a frozen instance. Call `unfreeze` if this is intended.')
     klass = self.__class__
     if isinstance(key, str):
         key = [key]
@@ -317,7 +319,8 @@ def _update(self, other=None, key=None, allow_new_key=False, allow_type_change=F
                     if isinstance(old_v, tuple) and isinstance(new_v, list):
                         new_v = tuple(new_v)
                     if not type(old_v) == type(new_v) and not allow_type_change:
-                        raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)}')
+                        raise TypeError(f'type not matching {type(old_v)} vs {type(new_v)},' +
+                            f' as `allow_type_change` is {allow_type_change}')
                     self.__setattr__(k, new_v, allow_type_change=allow_type_change)
 
 def _merge(self, other=None, key=None, allow_new_key=False, allow_type_change=False, **kwargs):

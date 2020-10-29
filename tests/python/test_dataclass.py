@@ -1,6 +1,7 @@
 import warnings
 import pytest
 from typing import Union, Tuple
+from dataclasses import fields
 
 from autocfg import dataclass, FrozenInstanceError  # advanced decorator out of dataclasses
 from autocfg import AnnotateField as AF  # version(and more) annotations
@@ -154,8 +155,13 @@ def test_auto_type_annotation():
     assert plain.a == 'a'
     assert plain.b == '2'
     plain2 = Plain()
+    print(plain2.__dataclass_fields__)
+    for k, v in plain2.__dataclass_fields__.items():
+        print(k, v._field_type)
+    print(fields(plain2))
     assert plain2.a == 1
     assert plain2.b == '2'
+    assert plain2.asdict().get('a', None) == 1
 
 """
 # check for modification, including type-check
