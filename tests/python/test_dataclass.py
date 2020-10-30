@@ -6,9 +6,12 @@ from dataclasses import fields
 from autocfg import dataclass, FrozenInstanceError  # advanced decorator out of dataclasses
 from autocfg import AnnotateField as AF  # version(and more) annotations
 
+class TypeC:
+    pass
+
 @dataclass
 class SomeConfig:
-    value : int = 1
+    value : Union[TypeC, int, str] = 1
     tup : Tuple = (1, 2, 3)
     no_type = 0.5
 
@@ -128,6 +131,11 @@ def test_assignment():
         exp1.train.learning_rate=1.0
         exp1.train.x.no_type = 'str_type'
         assert exp0 == exp1
+
+def test_union_type():
+    sc = SomeConfig()
+    sc.update(value='2')
+    sc.update({'value': 3})
 
 def test_diff():
     with pytest.warns(UserWarning):
