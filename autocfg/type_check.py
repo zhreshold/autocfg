@@ -150,36 +150,14 @@ else:
             return type(cls).__name__[1:]
 
 
-if hasattr(typing.List, '__args__'):
-    # python 3.6+
-    def _get_subtypes(cls):
-        subtypes = cls.__args__
+def _get_subtypes(cls):
+    subtypes = cls.__args__
 
-        if get_base_generic(cls) is typing.Callable:
-            if len(subtypes) != 2 or subtypes[0] is not ...:
-                subtypes = (subtypes[:-1], subtypes[-1])
+    if get_base_generic(cls) is typing.Callable:
+        if len(subtypes) != 2 or subtypes[0] is not ...:
+            subtypes = (subtypes[:-1], subtypes[-1])
 
-        return subtypes
-else:
-    # python 3.5
-    def _get_subtypes(cls):
-        if isinstance(cls, typing.CallableMeta):
-            if cls.__args__ is None:
-                return ()
-
-            return cls.__args__, cls.__result__
-
-        for name in ['__parameters__', '__union_params__', '__tuple_params__']:
-            try:
-                subtypes = getattr(cls, name)
-                break
-            except AttributeError:
-                pass
-        else:
-            raise NotImplementedError("Cannot extract subtypes from {}".format(cls))
-
-        subtypes = [typ for typ in subtypes if not isinstance(typ, typing.TypeVar)]
-        return subtypes
+    return subtypes
 
 
 def is_generic(cls):
