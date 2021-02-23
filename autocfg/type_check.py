@@ -6,7 +6,7 @@ __all__ = ['is_instance', 'is_subtype', 'python_type', 'is_generic', 'is_base_ge
 
 
 if hasattr(typing, '_GenericAlias'):
-    # python 3.7
+    # python >= 3.7
     def _is_generic(cls):
         if isinstance(cls, typing._GenericAlias):
             return True
@@ -19,10 +19,16 @@ if hasattr(typing, '_GenericAlias'):
 
     def _is_base_generic(cls):
         if isinstance(cls, typing._GenericAlias):
-            if cls.__origin__ in {typing.Generic, typing._Protocol}:
+            try:
+                # python >= 3.8
+                from typing import _Protocol as Protocol
+            except ImportError:
+                from typing import Protocol
+
+            if cls.__origin__ in {typing.Generic, Protocol}:
                 return False
 
-            if isinstance(cls, typing._VariadicGenericAlias):
+            if hasattr(typing, '_VariadicGenericAlias') and isinstance(cls, typing._VariadicGenericAlias):
                 return True
 
             return len(cls.__parameters__) > 0
