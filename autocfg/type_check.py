@@ -322,6 +322,7 @@ def _instancecheck_type(value, type_):
 
 _SPECIAL_INSTANCE_CHECKERS = {
     'Union': _instancecheck_union,
+    'Optional': _instancecheck_union,
     'Callable': _instancecheck_callable,
     'Type': _instancecheck_type,
     'Any': lambda v, t: True,
