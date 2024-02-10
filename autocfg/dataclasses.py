@@ -4,7 +4,7 @@ from typing import *
 import copy
 import json
 import argparse
-from distutils.version import LooseVersion
+from packaging import version
 import warnings
 import yaml
 from dataclasses import dataclass as _dataclass
@@ -161,16 +161,16 @@ def __post_init__(self):
         required_type = field_def.type
         if isinstance(required_type, AnnotateField):
             # check versions
-            auto_version = LooseVersion(self.__auto_version__)
-            added_version = LooseVersion(required_type.added if required_type.added else '0.0')
+            auto_version = version.parse(self.__auto_version__)
+            added_version = version.parse(required_type.added if required_type.added else '0.0')
             if added_version > auto_version:
                 self.__version_annotation__[field_name] = {
                     'mark': 'not_added',
                     'message': f'`{self.__class__}.{field_name}` is not added in version {self.__auto_version__}'
                 }
                 continue
-            deprecated_version = LooseVersion(required_type.deprecated if required_type.deprecated else '999.0')
-            deleted_version = LooseVersion(required_type.deleted if required_type.deleted else '999.0')
+            deprecated_version = version.parse(required_type.deprecated if required_type.deprecated else '999.0')
+            deleted_version = version.parse(required_type.deleted if required_type.deleted else '999.0')
             if deprecated_version <= auto_version < deleted_version:
                 self.__version_annotation__[field_name] = {
                     'mark': 'deprecated',

@@ -14,6 +14,7 @@ class SomeConfig:
     value : Union[TypeC, int, str] = 1
     tup : Tuple = (1, 2, 3)
     no_type = 0.5
+    optional: Union[None, str] = None
 
 @dataclass(version='0.1')
 class TrainConfig:
